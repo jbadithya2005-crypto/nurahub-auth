@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../vendor/autoload.php';
 function loadEnv(string $path): void {
     if (!file_exists($path)) {
         return;
@@ -43,21 +44,31 @@ function getMysqlConnection(): PDO {
 }
 
 function getMongoCollection(): ?MongoDB\Collection {
-    static $collection = null;
-    static $attempted = false;
-    if ($collection === null && !$attempted) {
-        $attempted = true;
-        try {
-            $uri = env('MONGO_URI', 'mongodb://127.0.0.1:27017');
-            $dbName = env('MONGO_DB', 'nurahub_auth');
-            $client = new MongoDB\Client($uri);
-            $collection = $client->selectDatabase($dbName)->selectCollection('profiles');
-        } catch (Throwable $e) {
-            error_log('MongoDB unavailable: ' . $e->getMessage());
-            $collection = null;
+    try {
+        $uri = env('MONGO_URI');
+        $dbName = env('MONGO_DB', 'nurahub_auth');
+
+        if (!$uri) {
+            throw new RuntimeException('MONGO_URI is empty or not loaded');
         }
+
+        $client = new MongoDB\Client($uri);
+
+        $db = $client->selectDatabase($dbName);
+
+        // Force Atlas connection
+        $db->command(['ping' => 1]);
+
+        return $db->selectCollection('profiles');
+
+    } catch (Throwable $e) {
+        // TEMPORARY: show the real error
+        throw new RuntimeException(
+            'MongoDB error: ' . $e->getMessage(),
+            0,
+            $e
+        );
     }
-    return $collection;
 }
 
 function getRedisConnection(): ?Redis {
